@@ -1,0 +1,7 @@
+Project requirements: Build an E-commerce system for ABC Company
+- Need to integrate online payment
+- Automatic inventory management
+- Revenue reporting dashboard
+- Multi-language support (Vietnamese, English)
+- Timeline: 6 months
+
