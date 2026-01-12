@@ -14,21 +14,26 @@ pip install -r requirements.txt
 
 ### 2. Configure API Key
 
-Create `.env` file from template:
+Create `.env` file and add your API credentials:
 
-```bash
-cp .env.example .env
+**Option 1: Use OpenAI (default)**
 ```
-
-Then open `.env` file and add your OpenAI API key:
-
-```
+AI_PROVIDER=openai
 OPENAI_API_KEY=sk-your-actual-api-key-here
+OPENAI_MODEL=gpt-4o-mini
+```
+
+**Option 2: Use Azure AI Inference (GitHub Models)**
+```
+AI_PROVIDER=azure
+GITHUB_TOKEN=your-github-token-here
+AZURE_ENDPOINT=https://models.github.ai/inference
+AZURE_MODEL=openai/gpt-5
 ```
 
 ### 3. Prepare input
 
-Open `input.txt` file and paste the client's project requirements there.
+Open `data/input.txt` file and paste the client's project requirements there.
 
 ## 📝 Usage
 
@@ -45,7 +50,7 @@ python app/main.py
 ```
 
 The application will:
-1. Read requirements from `input.txt`
+1. Read requirements from `data/input.txt`
 2. Send to GPT-4 to generate content for 5 slides
 3. Create PowerPoint file: `proposal_YYYYMMDD_HHMMSS.pptx`
 
@@ -68,6 +73,7 @@ bidcraft/
 │   ├── config/                 # Configuration
 │   │   ├── __init__.py
 │   │   └── settings.py        # App settings & env vars
+│   │   └── prompts.py         # Prompt templates 
 │   ├── services/              # Business logic services
 │   │   ├── __init__.py
 │   │   ├── ai_service.py      # AI content generation
@@ -81,8 +87,10 @@ bidcraft/
 │   │   └── parser.py          # Content parsing
 │   └── models/                # Data models
 │       └── __init__.py
+├── data/                      # Data files
+│   └── input.txt              # Input requirements
 ├── tests/                     # Test files
-├── input.txt                  # Input requirements
+├── setup.py                   # Package setup
 ├── requirements.txt
 ├── .env
 └── README.md

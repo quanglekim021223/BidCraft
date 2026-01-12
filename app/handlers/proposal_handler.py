@@ -12,9 +12,15 @@ from app.config.settings import Settings
 class ProposalHandler:
     """Handler for proposal generation workflow"""
     
-    def __init__(self):
-        """Initialize handler with required services"""
-        self.ai_service = AIService()
+    def __init__(self, prompt_style: Optional[str] = None):
+        """
+        Initialize handler with required services
+        
+        Args:
+            prompt_style: Prompt style to use (default: from settings)
+        """
+        prompt_style = prompt_style or Settings.PROMPT_STYLE
+        self.ai_service = AIService(prompt_style=prompt_style)
         self.pptx_service = PPTXService()
     
     def generate_proposal(
