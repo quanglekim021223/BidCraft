@@ -19,8 +19,7 @@ class AIService:
         Initialize AI service with configured settings
         
         Args:
-            prompt_style: Prompt style to use ("standard", "detailed", "concise")
-                          Default: "standard"
+            prompt_style: Prompt style to use 
         """
         Settings.validate()
         self.provider = Settings.AI_PROVIDER
@@ -63,7 +62,7 @@ class AIService:
         Setup the prompt template for proposal generation
         
         Args:
-            style: Prompt style (currently only "standard" is supported)
+            style: Prompt style
         """
         # Always use standard prompt (Western-style, assertive, evidence-based)
         self.prompt = ProposalPrompts.get_proposal_prompt()
@@ -82,7 +81,6 @@ class AIService:
             print("🧠 RAG context: skipped (service disabled or not ready)")
             return ""
 
-        # Simple strategy: use the requirement text directly as query
         query = requirement_text
         print("🧠 Building RAG context from requirement...")
         context = self.rag_service.retrieve_context(query)
@@ -100,18 +98,15 @@ class AIService:
         """
         start_time = time.time()
         print("🤖 Starting AI content generation...")
-        print(f"   Provider: {self.provider.upper()}")
         print(f"   Input length: {len(requirement_text)} characters")
         print()
 
-        # Build RAG context (if enabled)
         context = self._build_context(requirement_text)
 
         try:
             if self.provider == "azure":
                 result = self._generate_with_azure(requirement_text, context)
             else:
-                # OpenAI via LangChain
                 print("   📤 Preparing LangChain chain...")
                 chain = self.prompt | self.llm
                 print("   📡 Sending request to OpenAI API...")
@@ -171,7 +166,6 @@ class AIService:
         print("   🔧 Step 2/4: Initializing Azure client...")
         print(f"      Endpoint: {Settings.AZURE_ENDPOINT}")
         print(f"      Model: {Settings.AZURE_MODEL}")
-        print(f"      Token: {'*' * 20}... (hidden)")
         
         # Initialize Azure client
         client = ChatCompletionsClient(

@@ -9,9 +9,11 @@ import torch
 
 from app.config.settings import Settings
 
-from llama_index.core import VectorStoreIndex, StorageContext, load_index_from_storage
+from llama_index.core import VectorStoreIndex, StorageContext
 from llama_index.core.schema import Document
 from llama_index.readers.file import SimpleDirectoryReader
+import chromadb
+from llama_index.vector_stores.chroma import ChromaVectorStore
 
 
 class RAGService:
@@ -35,11 +37,25 @@ class RAGService:
 
         self._ensure_dirs()
         self._init_index()
+        
+        if not self.is_ready():
+            print("⚠️ RAGService initialized but index not ready. Some features may not work.")
 
     def _ensure_dirs(self) -> None:
         """Ensure required directories exist."""
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.persist_dir.mkdir(parents=True, exist_ok=True)
+    
+    def _get_chroma_collection(self):
+        """
+        Get or create ChromaDB collection for RAG index.
+        
+        Returns:
+            ChromaDB collection instance
+        """
+        if not hasattr(self, '_chroma_client'):
+            self._chroma_client = chromadb.PersistentClient(path=str(self.persist_dir))
+        return self._chroma_client.get_or_create_collection("rag_index")
     
     def _get_embedding_model(self):
         """
@@ -49,7 +65,6 @@ class RAGService:
         Returns:
             Embedding model instance
         """
-        # Try OpenAI embeddings first (if API key is available)
         if Settings.OPENAI_API_KEY:
             try:
                 from llama_index.embeddings.openai import OpenAIEmbedding
@@ -63,15 +78,10 @@ class RAGService:
         try:
             from llama_index.embeddings.huggingface import HuggingFaceEmbedding
             
-            # Auto-detect device: MPS for Mac M-chips, CPU otherwise
             device_type = "mps" if torch.backends.mps.is_available() else "cpu"
             
             print("   🆓 Using local HuggingFace embeddings (BAAI/bge-small-en-v1.5)")
-            print(f"   🚀 Running on: {device_type.upper()} (MPS = Apple Silicon GPU acceleration)")
-            print("   ℹ️  First run may download model (~130MB), subsequent runs are instant")
             
-            # BGE (BAAI General Embedding) models are state-of-the-art for RAG tasks
-            # Using MPS on Mac M-chips significantly speeds up embedding generation
             return HuggingFaceEmbedding(
                 model_name="BAAI/bge-small-en-v1.5",
                 cache_folder="./models_cache",
@@ -84,16 +94,30 @@ class RAGService:
             return None
 
     def _init_index(self) -> None:
-        """Initialize or load the LlamaIndex VectorStoreIndex."""
+        """Initialize or load the LlamaIndex VectorStoreIndex from ChromaDB."""
         start = time.time()
-        if any(self.persist_dir.iterdir()):
-            print(f"🧠 Loading existing RAG index from '{self.persist_dir}'...")
-            storage_context = StorageContext.from_defaults(persist_dir=str(self.persist_dir))
-            self._index = load_index_from_storage(storage_context)
+        
+        # Initialize ChromaDB collection
+        collection = self._get_chroma_collection()
+        
+        # Check if collection has data
+        doc_count = collection.count()
+        
+        if doc_count > 0:
+            print(f"🧠 Loading existing RAG index from ChromaDB (found {doc_count} documents)...")
+            # Create ChromaVectorStore with existing collection
+            vector_store = ChromaVectorStore(chroma_collection=collection)
+            storage_context = StorageContext.from_defaults(vector_store=vector_store)
+            
+            # Load index from ChromaDB
+            self._index = VectorStoreIndex.from_vector_store(
+                vector_store=vector_store,
+                storage_context=storage_context
+            )
             elapsed = time.time() - start
             print(f"   ✅ Index loaded in {elapsed:.2f} seconds")
         else:
-            print("🧠 No existing RAG index found. Building new index from documents...")
+            print("🧠 No existing RAG index found in ChromaDB. Building new index from documents...")
             self._build_index()
 
     def _build_index(self) -> None:
@@ -131,25 +155,31 @@ class RAGService:
 
         print(f"   📚 Loaded {len(documents)} documents")
 
+        # Get ChromaDB collection
+        collection = self._get_chroma_collection()
+        
+        # Create ChromaVectorStore
+        vector_store = ChromaVectorStore(chroma_collection=collection)
+        storage_context = StorageContext.from_defaults(vector_store=vector_store)
+        
         if not documents:
             # Create an empty index to avoid errors
-            self._index = VectorStoreIndex.from_documents([])
+            self._index = VectorStoreIndex.from_documents(
+                [],
+                storage_context=storage_context
+            )
         else:
-            # Choose embedding model based on available API keys
             embed_model = self._get_embedding_model()
             print(f"   🔤 Using embedding model: {embed_model.__class__.__name__}")
             
             self._index = VectorStoreIndex.from_documents(
                 documents,
+                storage_context=storage_context,
                 embed_model=embed_model,
             )
 
-        # Persist index
-        if self._index is not None:
-            self._index.storage_context.persist(persist_dir=str(self.persist_dir))
-
         elapsed = time.time() - start
-        print(f"   ✅ RAG index built and persisted in {elapsed:.2f} seconds")
+        print(f"   ✅ RAG index built and persisted to ChromaDB in {elapsed:.2f} seconds")
 
     def is_ready(self) -> bool:
         """Check if RAG index is ready to use."""
@@ -166,8 +196,8 @@ class RAGService:
         Returns:
             Context string to inject into prompts.
         """
-        if not self.is_ready():
-            print("🧠 RAGService not ready or disabled. Returning empty context.")
+        if self._index is None:
+            print("🧠 RAGService index not available. Returning empty context.")
             return ""
 
         print("🧠 RAGService: querying index...")
