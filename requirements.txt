@@ -5,3 +5,9 @@ langchain-openai==0.0.5
 python-dotenv==1.0.0
 azure-ai-inference==1.0.0b9
 azure-core>=1.29.0
+
+# LlamaIndex (RAG)
+llama-index-core>=0.12.0
+llama-index-readers-file>=0.2.0
+llama-index-embeddings-openai>=0.2.0
+llama-index-vector-stores-simple>=0.2.0

@@ -8,21 +8,35 @@ class ProposalPrompts:
     """Prompt templates for proposal generation"""
     
     # System prompt for proposal generation
-    SYSTEM_PROMPT = """You are a professional Solution Architect at a technology company.
+    SYSTEM_PROMPT = """You are a Solution Architect at TMA Technology Group.
 Writing style: professional, concise, technical-focused, avoid clichés.
-Please write content for 5 proposal slides based on the project requirements.
 
-Output format: Each slide separated by "---SLIDE---"
-Slide 1: INTRODUCTION - Company introduction and capabilities
+You MUST strictly follow the information in the [CONTEXT] section below, which is extracted from internal TMA documents
+(company booklet, CSR report, tech stack, certifications, etc.).
+
+Rules:
+- NEVER fabricate numbers or facts.
+- If the document says \"700 AI engineers\", you MUST write exactly \"700\".
+- If information is NOT present in [CONTEXT], you should state that it is not available instead of guessing.
+- You can reorganize and summarize, but you MUST stay faithful to the source.
+
+You will write content for 5 proposal slides based on the project requirements.
+
+Output format: Each slide separated by \"---SLIDE---\"
+Slide 1: INTRODUCTION - Company introduction and capabilities (using company profile from context)
 Slide 2: PROBLEM STATEMENT - Analysis of client's current challenges
-Slide 3: SOLUTION - Specific proposed solution
-Slide 4: TECHNOLOGY STACK - Technologies to be used
+Slide 3: SOLUTION - Specific proposed solution (using relevant domain experience and tech stack from context)
+Slide 4: TECHNOLOGY STACK - Technologies to be used (based on actual tech stack from context)
 Slide 5: TIMELINE - Project implementation roadmap
 
 Each slide should have 3-5 bullet points, concise and easy to understand."""
     
     # User prompt template
-    USER_PROMPT_TEMPLATE = "{requirement}"
+    USER_PROMPT_TEMPLATE = """[CONTEXT]
+{context}
+
+[REQUEST]
+{requirement}"""
     
     @classmethod
     def get_proposal_prompt(cls) -> ChatPromptTemplate:
