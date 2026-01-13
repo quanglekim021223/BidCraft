@@ -5,12 +5,13 @@ import time
 from pathlib import Path
 from typing import Optional
 
+import torch 
+
 from app.config.settings import Settings
 
 from llama_index.core import VectorStoreIndex, StorageContext, load_index_from_storage
 from llama_index.core.schema import Document
 from llama_index.readers.file import SimpleDirectoryReader
-from llama_index.embeddings.openai import OpenAIEmbedding
 
 
 class RAGService:
@@ -39,6 +40,48 @@ class RAGService:
         """Ensure required directories exist."""
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.persist_dir.mkdir(parents=True, exist_ok=True)
+    
+    def _get_embedding_model(self):
+        """
+        Get embedding model based on available API keys.
+        Priority: OpenAI (if key available) > Local sentence-transformers (free, no API needed)
+        
+        Returns:
+            Embedding model instance
+        """
+        # Try OpenAI embeddings first (if API key is available)
+        if Settings.OPENAI_API_KEY:
+            try:
+                from llama_index.embeddings.openai import OpenAIEmbedding
+                print("   🔑 Using OpenAI embeddings (text-embedding-3-small)")
+                return OpenAIEmbedding(model="text-embedding-3-small", api_key=Settings.OPENAI_API_KEY)
+            except Exception as e:
+                print(f"   ⚠️ Failed to initialize OpenAI embeddings: {e}")
+                print("   🔄 Falling back to local embeddings...")
+        
+        # Fallback to local embeddings (free, no API key needed)
+        try:
+            from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+            
+            # Auto-detect device: MPS for Mac M-chips, CPU otherwise
+            device_type = "mps" if torch.backends.mps.is_available() else "cpu"
+            
+            print("   🆓 Using local HuggingFace embeddings (BAAI/bge-small-en-v1.5)")
+            print(f"   🚀 Running on: {device_type.upper()} (MPS = Apple Silicon GPU acceleration)")
+            print("   ℹ️  First run may download model (~130MB), subsequent runs are instant")
+            
+            # BGE (BAAI General Embedding) models are state-of-the-art for RAG tasks
+            # Using MPS on Mac M-chips significantly speeds up embedding generation
+            return HuggingFaceEmbedding(
+                model_name="BAAI/bge-small-en-v1.5",
+                cache_folder="./models_cache",
+                device=device_type
+            )
+        except Exception as e:
+            print(f"   ❌ Failed to initialize local embeddings: {e}")
+            # Last resort: use default embeddings (may be slower/less accurate)
+            print("   ⚠️ Using default embeddings (may be slower)")
+            return None
 
     def _init_index(self) -> None:
         """Initialize or load the LlamaIndex VectorStoreIndex."""
@@ -92,8 +135,10 @@ class RAGService:
             # Create an empty index to avoid errors
             self._index = VectorStoreIndex.from_documents([])
         else:
-            # Use OpenAI embeddings (works with both OpenAI and Azure LLM setup)
-            embed_model = OpenAIEmbedding(model="text-embedding-3-small")
+            # Choose embedding model based on available API keys
+            embed_model = self._get_embedding_model()
+            print(f"   🔤 Using embedding model: {embed_model.__class__.__name__}")
+            
             self._index = VectorStoreIndex.from_documents(
                 documents,
                 embed_model=embed_model,

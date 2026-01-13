@@ -37,11 +37,11 @@ class Settings:
     
     # Slide configuration
     SLIDE_TITLES: list[str] = [
-        "INTRODUCTION",
-        "PROBLEM STATEMENT",
-        "SOLUTION",
+        "EXECUTIVE SUMMARY",
+        "UNDERSTANDING THE CHALLENGE",
+        "OUR SOLUTION",
         "TECHNOLOGY STACK",
-        "TIMELINE"
+        "ROADMAP & COMMITMENT"
     ]
     
     # PowerPoint settings

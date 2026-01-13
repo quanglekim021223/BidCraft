@@ -63,24 +63,10 @@ class AIService:
         Setup the prompt template for proposal generation
         
         Args:
-            style: Prompt style ("standard", "detailed", "concise")
+            style: Prompt style (currently only "standard" is supported)
         """
-        self._current_style = style  # Store style for Azure provider
-        if style == "standard":
-            self.prompt = ProposalPrompts.get_proposal_prompt()
-        elif style == "detailed":
-            from app.config.prompts import AlternativePrompts
-            self.prompt = ProposalPrompts.get_custom_prompt(
-                system_prompt=AlternativePrompts.DETAILED_SYSTEM_PROMPT
-            )
-        elif style == "concise":
-            from app.config.prompts import AlternativePrompts
-            self.prompt = ProposalPrompts.get_custom_prompt(
-                system_prompt=AlternativePrompts.CONCISE_SYSTEM_PROMPT
-            )
-        else:
-            # Default to standard
-            self.prompt = ProposalPrompts.get_proposal_prompt()
+        # Always use standard prompt (Western-style, assertive, evidence-based)
+        self.prompt = ProposalPrompts.get_proposal_prompt()
     
     def _build_context(self, requirement_text: str) -> str:
         """
@@ -168,22 +154,9 @@ class AIService:
         from azure.core.exceptions import HttpResponseError
         
         print("   🔧 Step 1/4: Preparing prompts...")
-        # Get system prompt based on current style
-        if hasattr(self, '_current_style'):
-            if self._current_style == "detailed":
-                from app.config.prompts import AlternativePrompts
-                system_message = AlternativePrompts.DETAILED_SYSTEM_PROMPT
-                print(f"      Using 'detailed' prompt style")
-            elif self._current_style == "concise":
-                from app.config.prompts import AlternativePrompts
-                system_message = AlternativePrompts.CONCISE_SYSTEM_PROMPT
-                print(f"      Using 'concise' prompt style")
-            else:
-                system_message = ProposalPrompts.SYSTEM_PROMPT
-                print(f"      Using 'standard' prompt style")
-        else:
-            system_message = ProposalPrompts.SYSTEM_PROMPT
-            print(f"      Using 'standard' prompt style (default)")
+        # Use standard Western-style prompt
+        system_message = ProposalPrompts.SYSTEM_PROMPT
+        print(f"      Using Western-style prompt (assertive, evidence-based)")
         
         print(f"      System prompt length: {len(system_message)} characters")
         

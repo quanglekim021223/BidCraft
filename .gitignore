@@ -18,6 +18,9 @@ build/
 .coverage
 htmlcov/
 
+# Model cache
+models_cache/
+
 # Output files
 *.pptx
 *.docx
