@@ -210,10 +210,17 @@ class RAGService:
 
         # Basic string representation of response
         raw_context = str(response)
-        context = raw_context[:max_chars]
+        
+        # Summarize if context is too long (instead of truncating)
+        if len(raw_context) > max_chars:
+            print(f"   📝 Context too long ({len(raw_context)} chars), summarizing to {max_chars} chars...")
+            context = self._summarize_context(raw_context, max_chars)
+            print(f"   ✅ Context summarized: {len(context)} characters")
+        else:
+            context = raw_context
 
         print(f"   ✅ RAG query completed in {elapsed:.2f} seconds")
-        print(f"   📏 Context length: {len(context)} characters (truncated from {len(raw_context)})")
+        print(f"   📏 Context length: {len(context)} characters")
 
         # Optionally, we could inspect source_nodes for debugging:
         try:
@@ -225,4 +232,93 @@ class RAGService:
             pass
 
         return context
+    
+    def _summarize_context(self, context: str, max_chars: int) -> str:
+        """
+        Summarize context using LLM to keep only key points.
+        
+        Args:
+            context: Raw context text to summarize
+            max_chars: Target maximum characters for summary
+            
+        Returns:
+            Summarized context string
+        """
+        try:
+            if Settings.AI_PROVIDER == "azure":
+                return self._summarize_with_azure(context, max_chars)
+            else:
+                return self._summarize_with_openai(context, max_chars)
+        except Exception as e:
+            print(f"   ⚠️ Summarization failed: {e}. Falling back to truncation.")
+            return context[:max_chars]
+    
+    def _summarize_with_azure(self, context: str, max_chars: int) -> str:
+        """Summarize context using Azure AI Inference API."""
+        from azure.ai.inference import ChatCompletionsClient
+        from azure.ai.inference.models import SystemMessage, UserMessage
+        from azure.core.credentials import AzureKeyCredential
+        from azure.core.exceptions import HttpResponseError
+        
+        client = ChatCompletionsClient(
+            endpoint=Settings.AZURE_ENDPOINT,
+            credential=AzureKeyCredential(Settings.AZURE_TOKEN)
+        )
+        
+        system_prompt = """You are a helpful assistant that summarizes technical documents.
+Extract and keep only the most important key points, facts, and numbers.
+Maintain accuracy and preserve specific details like numbers, certifications, and technical terms.
+Output should be concise but comprehensive."""
+        
+        user_prompt = f"""Summarize the following context, keeping only the most important key points.
+Target length: approximately {max_chars} characters.
+Preserve specific numbers, facts, and technical details.
+
+Context to summarize:
+{context}"""
+        
+        try:
+            response = client.complete(
+                messages=[
+                    SystemMessage(system_prompt),
+                    UserMessage(user_prompt),
+                ],
+                model=Settings.AZURE_MODEL,
+            )
+            summary = response.choices[0].message.content
+            return summary[:max_chars]  # Safety truncation if still too long
+        except HttpResponseError as e:
+            raise Exception(f"Azure API error: {e}")
+    
+    def _summarize_with_openai(self, context: str, max_chars: int) -> str:
+        """Summarize context using OpenAI API."""
+        from openai import OpenAI
+        
+        client = OpenAI(api_key=Settings.OPENAI_API_KEY)
+        
+        system_prompt = """You are a helpful assistant that summarizes technical documents.
+Extract and keep only the most important key points, facts, and numbers.
+Maintain accuracy and preserve specific details like numbers, certifications, and technical terms.
+Output should be concise but comprehensive."""
+        
+        user_prompt = f"""Summarize the following context, keeping only the most important key points.
+Target length: approximately {max_chars} characters.
+Preserve specific numbers, facts, and technical details.
+
+Context to summarize:
+{context}"""
+        
+        try:
+            response = client.chat.completions.create(
+                model=Settings.OPENAI_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.3,  # Lower temperature for more focused summarization
+            )
+            summary = response.choices[0].message.content
+            return summary[:max_chars]  # Safety truncation if still too long
+        except Exception as e:
+            raise Exception(f"OpenAI API error: {e}")
 
