@@ -1,4 +1,4 @@
-"""Main entry point for BidCraft CLI application"""
+"""Main entry point for ProposalCraft CLI application"""
 
 from app.handlers.proposal_handler import ProposalHandler
 
@@ -6,7 +6,7 @@ from app.handlers.proposal_handler import ProposalHandler
 def main():
     """Main function - CLI entry point"""
     print("=" * 50)
-    print("🚀 BIDCRAFT - Proposal Generator")
+    print("🚀 ProposalCraft - Proposal Generator")
     print("=" * 50)
     print()
     

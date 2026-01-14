@@ -2,6 +2,22 @@ python-pptx==0.6.23
 openai==1.12.0
 langchain==0.1.10
 langchain-openai==0.0.5
+langsmith>=0.1.0
 python-dotenv==1.0.0
 azure-ai-inference==1.0.0b9
 azure-core>=1.29.0
+
+# LlamaIndex (RAG)
+llama-index-core>=0.11.0,<0.12.0
+llama-index-readers-file>=0.2.0
+llama-index-embeddings-openai>=0.2.0
+llama-index-embeddings-huggingface>=0.2.0
+llama-index-vector-stores-chroma>=0.1.0
+# llama-index-llms-openai>=0.2.0  # Commented out - may not be compatible with core 0.11.x
+# Note: Code will fallback to retriever-only mode if LLM is not available
+# ChromaDB for vector storage
+chromadb>=0.4.0
+# For local embeddings
+sentence-transformers>=2.2.0
+torch>=2.0.0
+

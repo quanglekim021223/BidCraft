@@ -20,9 +20,8 @@ class Settings:
     
     # Azure AI Inference Configuration
     AZURE_ENDPOINT: str = os.getenv("AZURE_ENDPOINT", "https://models.github.ai/inference")
-    AZURE_MODEL: str = os.getenv("AZURE_MODEL", "openai/gpt-5")
+    AZURE_MODEL: str = os.getenv("AZURE_MODEL", "openai/o4-mini")
     AZURE_TOKEN: str = os.getenv("GITHUB_TOKEN", "")
-    AZURE_TEMPERATURE: float = float(os.getenv("AZURE_TEMPERATURE", "0.7"))
     
     # Prompt Configuration
     PROMPT_STYLE: str = os.getenv("PROMPT_STYLE", "standard")  # standard, detailed, concise
@@ -31,13 +30,25 @@ class Settings:
     INPUT_FILE: str = os.getenv("INPUT_FILE", "data/input.txt")
     OUTPUT_DIR: str = os.getenv("OUTPUT_DIR", ".")
     
+    # RAG / LlamaIndex configuration
+    RAG_ENABLED: bool = os.getenv("RAG_ENABLED", "true").lower() == "true"
+    RAG_DATA_DIR: str = os.getenv("RAG_DATA_DIR", "data/knowledge_base")
+    RAG_PERSIST_DIR: str = os.getenv("RAG_PERSIST_DIR", "storage/rag_index")
+    
+    # LangSmith / Monitoring configuration
+    LANGSMITH_ENABLED: bool = os.getenv("LANGSMITH_ENABLED", "false").lower() == "true"
+    LANGCHAIN_API_KEY: str = os.getenv("LANGCHAIN_API_KEY", "")
+    LANGCHAIN_TRACING_V2: str = os.getenv("LANGCHAIN_TRACING_V2", "false")
+    LANGCHAIN_PROJECT: str = os.getenv("LANGCHAIN_PROJECT", "ProposalCraft")
+    LANGCHAIN_ENDPOINT: str = os.getenv("LANGCHAIN_ENDPOINT", "https://api.smith.langchain.com")
+    
     # Slide configuration
     SLIDE_TITLES: list[str] = [
-        "INTRODUCTION",
-        "PROBLEM STATEMENT",
-        "SOLUTION",
+        "EXECUTIVE SUMMARY",
+        "UNDERSTANDING THE CHALLENGE",
+        "OUR SOLUTION",
         "TECHNOLOGY STACK",
-        "TIMELINE"
+        "ROADMAP & COMMITMENT"
     ]
     
     # PowerPoint settings

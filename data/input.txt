@@ -1,0 +1,13 @@
+From: Mike Ross, Founder of PetBox (US) To: TMA Solutions Subject: Looking for dev team for Pet Subscription App (Targeting Japan Market)
+Hi team,
+We are a US-based startup selling premium pet food subscriptions. We are looking to scale our tech team to build a new mobile app and backend.
+Here is what we need:
+Market Expansion: We are entering Tokyo, Japan next quarter. The app needs to handle Japanese text vertical layout and integrate with local logistics partners there.
+Recurring Billing: We don't sell single items. We need a complex Subscription Engine that charges users monthly (integration with Stripe Billing or Recurly).
+Data Privacy: Since we handle user addresses, we are very worried about data leaks. Do you have any strict security protocols? (We are aiming for SOC2 or similar compliance).
+Tech Preferences:
+We hate old tech. We want Golang for backend because it's fast.
+Mobile must be Flutter (Single codebase for iOS/Android).
+Infrastructure: We use Google Cloud Platform (GCP) solely.
+Communication: Our last outsourcing partner in India failed because of the time zone and language barrier. We need a team that speaks English well and can overlap with our PST timezone.
+Timeline: We need an MVP in 3 months to show investors.

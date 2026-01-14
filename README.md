@@ -70,14 +70,15 @@ bidcraft/
 ├── app/
 │   ├── __init__.py
 │   ├── main.py                 # Entry point
-│   ├── config/                 # Configuration
+│   ├── config/                  # Configuration
 │   │   ├── __init__.py
-│   │   └── settings.py        # App settings & env vars
-│   │   └── prompts.py         # Prompt templates 
-│   ├── services/              # Business logic services
+│   │   ├── settings.py          # App settings & env vars
+│   │   └── prompts.py           # Prompt templates (with [CONTEXT])
+│   ├── services/                # Business logic services
 │   │   ├── __init__.py
-│   │   ├── ai_service.py      # AI content generation
-│   │   └── pptx_service.py    # PowerPoint creation
+│   │   ├── ai_service.py        # AI content generation + RAG integration
+│   │   ├── pptx_service.py      # PowerPoint creation
+│   │   └── rag_service.py       # LlamaIndex RAG service (Booklet + CSR)
 │   ├── handlers/              # Request handlers
 │   │   ├── __init__.py
 │   │   └── proposal_handler.py # Main proposal workflow
@@ -85,12 +86,18 @@ bidcraft/
 │   │   ├── __init__.py
 │   │   ├── file_utils.py      # File I/O operations
 │   │   └── parser.py          # Content parsing
-│   └── models/                # Data models
+│   └── models/                  # Data models
 │       └── __init__.py
-├── data/                      # Data files
-│   └── input.txt              # Input requirements
-├── tests/                     # Test files
-├── setup.py                   # Package setup
+├── data/                        # Data files
+│   ├── input.txt                # Input requirements
+│   └── knowledge_base/          # Internal knowledge base for RAG
+│       ├── TMA-CSR-Report-2023.pdf   # CSR (trust signals, awards, ISO, ...)
+│       ├── TMA-Tech-Group-Booklet-EN.pdf # Company profile, tech stack, domains
+│       └── TMA-Tech-Group-EN.pptx   # Company deck (optional)
+├── storage/
+│   └── rag_index/               # Persisted LlamaIndex vector store
+├── tests/                       # Test files
+├── setup.py                     # Package setup
 ├── requirements.txt
 ├── .env
 └── README.md
@@ -98,6 +105,7 @@ bidcraft/
 
 ## 🛠 Tech Stack
 
-- Python 3.8+
-- LangChain + OpenAI API
+- Python 3.12+
+- LangChain + OpenAI API / Azure AI Inference
+- LlamaIndex (RAG over internal PDFs)
 - python-pptx

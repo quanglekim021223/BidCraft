@@ -18,6 +18,9 @@ build/
 .coverage
 htmlcov/
 
+# Model cache
+models_cache/
+
 # Output files
 *.pptx
 *.docx
@@ -31,5 +34,6 @@ proposal_*.pptx
 
 # OS
 .DS_Store
+**/.DS_Store
 Thumbs.db
 
