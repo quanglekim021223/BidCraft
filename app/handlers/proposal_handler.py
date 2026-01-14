@@ -2,11 +2,22 @@
 
 from typing import Optional
 
+from app.config.settings import Settings
+
+# Import traceable for LangSmith tracing if enabled
+if Settings.LANGSMITH_ENABLED and Settings.LANGCHAIN_API_KEY:
+    from langsmith import traceable
+else:
+    # Dummy decorator if LangSmith not enabled
+    def traceable(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+
 from app.services.ai_service import AIService
 from app.services.pptx_service import PPTXService
 from app.utils.file_utils import read_input_file
 from app.utils.parser import parse_slides_content
-from app.config.settings import Settings
 
 
 class ProposalHandler:
@@ -23,6 +34,7 @@ class ProposalHandler:
         self.ai_service = AIService(prompt_style=prompt_style)
         self.pptx_service = PPTXService()
     
+    @traceable(name="generate_proposal", run_type="chain")
     def generate_proposal(
         self, 
         input_file: Optional[str] = None
@@ -53,11 +65,18 @@ class ProposalHandler:
             print()
         except Exception as e:
             print(f"❌ Error calling AI: {e}")
-            print("💡 Please check OPENAI_API_KEY in .env file")
+            # Show appropriate error message based on provider
+            if Settings.AI_PROVIDER == "azure":
+                print("💡 Please check GITHUB_TOKEN (AZURE_TOKEN) in .env file")
+            else:
+                print("💡 Please check OPENAI_API_KEY in .env file")
             return None
         
         # Step 3: Parse slides
-        slides = parse_slides_content(ai_content)
+        slides = parse_slides_content(
+            ai_content, 
+            slide_titles=Settings.SLIDE_TITLES
+        )
         print(f"📊 Parsed into {len(slides)} slides")
         print()
         

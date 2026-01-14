@@ -9,11 +9,152 @@ import torch
 
 from app.config.settings import Settings
 
+# Import traceable for LangSmith tracing if enabled
+if Settings.LANGSMITH_ENABLED and Settings.LANGCHAIN_API_KEY:
+    from langsmith import traceable
+else:
+    # Dummy decorator if LangSmith not enabled
+    def traceable(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+
 from llama_index.core import VectorStoreIndex, StorageContext
 from llama_index.core.schema import Document
-from llama_index.readers.file import SimpleDirectoryReader
+from llama_index.core.readers import SimpleDirectoryReader
+from llama_index.core.llms import LLMMetadata, CompletionResponse, CompletionResponseGen, LLM, ChatMessage, ChatResponse
+from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+# llama_index.llms.openai will be imported conditionally in _get_llm_for_query()
 import chromadb
 from llama_index.vector_stores.chroma import ChromaVectorStore
+from azure.ai.inference import ChatCompletionsClient
+from azure.ai.inference.models import SystemMessage, UserMessage
+from azure.core.credentials import AzureKeyCredential
+from azure.core.exceptions import HttpResponseError
+from openai import OpenAI
+
+
+class AzureLLM(LLM):
+    """Custom LLM wrapper for Azure AI Inference API to work with LlamaIndex query engine."""
+    
+    # Pydantic fields
+    endpoint: str
+    model: str
+    token: str
+    temperature: float = 0.3
+    
+    def __init__(self, endpoint: str, model: str, token: str, temperature: float = 0.3, **kwargs):
+        super().__init__(endpoint=endpoint, model=model, token=token, temperature=temperature, **kwargs)
+        # Initialize client after Pydantic model is created
+        self._client = ChatCompletionsClient(
+            endpoint=endpoint,
+            credential=AzureKeyCredential(token)
+        )
+    
+    @property
+    def metadata(self) -> LLMMetadata:
+        """Return LLM metadata."""
+        return LLMMetadata(
+            model_name=self.model,
+            temperature=self.temperature,
+        )
+    
+    def complete(self, prompt: str, **kwargs) -> CompletionResponse:
+        """Complete a prompt using Azure AI Inference API."""
+        from datetime import datetime
+        try:
+            print(f"      🔹 [{datetime.now().strftime('%H:%M:%S')}] AzureLLM.complete() called")
+            print(f"         📝 Prompt length: {len(prompt)} characters")
+            print(f"         📡 Calling Azure API ({self.model})...")
+            
+            api_start = time.time()
+            response = self._client.complete(
+                messages=[
+                    UserMessage(prompt),
+                ],
+                model=self.model,
+            )
+            api_elapsed = time.time() - api_start
+            
+            text = response.choices[0].message.content
+            print(f"         ✅ [{datetime.now().strftime('%H:%M:%S')}] Azure API response received ({api_elapsed:.2f}s)")
+            print(f"         📊 Response length: {len(text)} characters")
+            
+            return CompletionResponse(text=text)
+        except Exception as e:
+            print(f"         ❌ Azure API error: {e}")
+            raise Exception(f"Azure API error: {e}")
+    
+    def stream_complete(self, prompt: str, **kwargs) -> CompletionResponseGen:
+        """Stream completion (not implemented for Azure)."""
+        # For simplicity, just return non-streaming completion
+        response = self.complete(prompt, **kwargs)
+        yield response
+    
+    def chat(self, messages, **kwargs) -> ChatResponse:
+        """Chat with messages using Azure AI Inference API."""
+        from datetime import datetime
+        try:
+            print(f"      🔹 [{datetime.now().strftime('%H:%M:%S')}] AzureLLM.chat() called")
+            print(f"         💬 Number of messages: {len(messages)}")
+            
+            # Convert ChatMessage to Azure UserMessage
+            azure_messages = []
+            total_content_len = 0
+            for msg in messages:
+                if hasattr(msg, 'content'):
+                    content = msg.content
+                    azure_messages.append(UserMessage(content))
+                    total_content_len += len(content)
+                else:
+                    content = str(msg)
+                    azure_messages.append(UserMessage(content))
+                    total_content_len += len(content)
+            
+            print(f"         📝 Total messages length: {total_content_len} characters")
+            print(f"         📡 Calling Azure API ({self.model})...")
+            
+            api_start = time.time()
+            response = self._client.complete(
+                messages=azure_messages,
+                model=self.model,
+            )
+            api_elapsed = time.time() - api_start
+            
+            text = response.choices[0].message.content
+            print(f"         ✅ [{datetime.now().strftime('%H:%M:%S')}] Azure API response received ({api_elapsed:.2f}s)")
+            print(f"         📊 Response length: {len(text)} characters")
+            
+            # Create ChatResponse
+            return ChatResponse(message=ChatMessage(role="assistant", content=text))
+        except Exception as e:
+            print(f"         ❌ Azure API error: {e}")
+            raise Exception(f"Azure API error: {e}")
+    
+    def stream_chat(self, messages, **kwargs):
+        """Stream chat (not implemented for Azure)."""
+        # For simplicity, just return non-streaming chat
+        response = self.chat(messages, **kwargs)
+        yield response
+    
+    async def acomplete(self, prompt: str, **kwargs) -> CompletionResponse:
+        """Async complete - not implemented, use sync version."""
+        return self.complete(prompt, **kwargs)
+    
+    async def astream_complete(self, prompt: str, **kwargs):
+        """Async stream complete - not implemented, use sync version."""
+        for item in self.stream_complete(prompt, **kwargs):
+            yield item
+    
+    async def achat(self, messages, **kwargs) -> ChatResponse:
+        """Async chat - not implemented, use sync version."""
+        return self.chat(messages, **kwargs)
+    
+    async def astream_chat(self, messages, **kwargs):
+        """Async stream chat - not implemented, use sync version."""
+        for item in self.stream_chat(messages, **kwargs):
+            yield item
 
 
 class RAGService:
@@ -67,7 +208,6 @@ class RAGService:
         """
         if Settings.OPENAI_API_KEY:
             try:
-                from llama_index.embeddings.openai import OpenAIEmbedding
                 print("   🔑 Using OpenAI embeddings (text-embedding-3-small)")
                 return OpenAIEmbedding(model="text-embedding-3-small", api_key=Settings.OPENAI_API_KEY)
             except Exception as e:
@@ -76,8 +216,6 @@ class RAGService:
         
         # Fallback to local embeddings (free, no API key needed)
         try:
-            from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-            
             device_type = "mps" if torch.backends.mps.is_available() else "cpu"
             
             print("   🆓 Using local HuggingFace embeddings (BAAI/bge-small-en-v1.5)")
@@ -89,7 +227,6 @@ class RAGService:
             )
         except Exception as e:
             print(f"   ❌ Failed to initialize local embeddings: {e}")
-            # Last resort: use default embeddings (may be slower/less accurate)
             print("   ⚠️ Using default embeddings (may be slower)")
             return None
 
@@ -109,10 +246,14 @@ class RAGService:
             vector_store = ChromaVectorStore(chroma_collection=collection)
             storage_context = StorageContext.from_defaults(vector_store=vector_store)
             
-            # Load index from ChromaDB
+            # Get the same embedding model used to build the index
+            embed_model = self._get_embedding_model()
+            
+            # Load index from ChromaDB with the same embedding model
             self._index = VectorStoreIndex.from_vector_store(
                 vector_store=vector_store,
-                storage_context=storage_context
+                storage_context=storage_context,
+                embed_model=embed_model
             )
             elapsed = time.time() - start
             print(f"   ✅ Index loaded in {elapsed:.2f} seconds")
@@ -124,32 +265,20 @@ class RAGService:
         """Build a new index from PDF documents and persist it."""
         start = time.time()
 
-        # Filter for our target PDFs if present
-        target_files = [
-            "TMA-CSR-Report-2023.pdf",
-            "TMA-Tech-Group-Booklet-EN.pdf",
-            "TMA-Technology-Group-Booklet.pdf",
-        ]
-
+        # Find all PDF files in the knowledge base directory
         existing_files = [p for p in self.data_dir.iterdir() if p.is_file()]
         pdf_files = [p for p in existing_files if p.suffix.lower() == ".pdf"]
 
-        selected_files = [
-            p
-            for p in pdf_files
-            if any(tf.lower() in p.name.lower() for tf in target_files)
-        ]
-
-        if not selected_files:
-            print(f"   ⚠️ No matching PDF files found in '{self.data_dir}'. RAG will be empty.")
+        if not pdf_files:
+            print(f"   ⚠️ No PDF files found in '{self.data_dir}'. RAG will be empty.")
             documents: list[Document] = []
         else:
-            print("   📄 Found PDF files for indexing:")
-            for p in selected_files:
+            print(f"   📄 Found {len(pdf_files)} PDF file(s) for indexing:")
+            for p in pdf_files:
                 print(f"      - {p.name}")
 
             reader = SimpleDirectoryReader(
-                input_files=[str(p) for p in selected_files]
+                input_files=[str(p) for p in pdf_files]
             )
             documents = reader.load_data()
 
@@ -185,9 +314,10 @@ class RAGService:
         """Check if RAG index is ready to use."""
         return self.enabled and self._index is not None
 
-    def retrieve_context(self, query: str, max_chars: int = 2000) -> str:
+    @traceable(name="rag_retrieve_context", run_type="chain")
+    def retrieve_context(self, query: str, max_chars: int = 3000) -> str:
         """
-        Retrieve relevant context for a given query.
+        Retrieve relevant context for a given query using retriever (fast & reliable).
 
         Args:
             query: User query / requirement description.
@@ -204,35 +334,77 @@ class RAGService:
         print(f"   🔍 Query: {query[:200]}{'...' if len(query) > 200 else ''}")
 
         start = time.time()
-        query_engine = self._index.as_query_engine()
-        response = query_engine.query(query)
+        
+        # Use retriever only (fast & reliable, no LLM dependency)
+        print("   🔍 Using retriever only (fast & reliable)...")
+        retriever = self._index.as_retriever(similarity_top_k=2) 
+        
+        retrieve_start = time.time()
+        nodes = retriever.retrieve(query)
+        retrieve_elapsed = time.time() - retrieve_start
+        
+        print(f"   ✅ Retrieved {len(nodes)} relevant documents in {retrieve_elapsed:.2f} seconds")
+        
+        # Combine retrieved nodes into context string
+        raw_context = "\n\n".join([node.text for node in nodes])
+        num_nodes = len(nodes)
+        
         elapsed = time.time() - start
-
-        # Basic string representation of response
-        raw_context = str(response)
         
         # Summarize if context is too long (instead of truncating)
         if len(raw_context) > max_chars:
             print(f"   📝 Context too long ({len(raw_context)} chars), summarizing to {max_chars} chars...")
+            summarize_start = time.time()
             context = self._summarize_context(raw_context, max_chars)
-            print(f"   ✅ Context summarized: {len(context)} characters")
+            summarize_elapsed = time.time() - summarize_start
+            print(f"   ✅ Context summarized in {summarize_elapsed:.2f} seconds ({len(context)} characters)")
         else:
             context = raw_context
 
         print(f"   ✅ RAG query completed in {elapsed:.2f} seconds")
         print(f"   📏 Context length: {len(context)} characters")
-
-        # Optionally, we could inspect source_nodes for debugging:
-        try:
-            source_nodes = getattr(response, "source_nodes", None)
-            if source_nodes:
-                print(f"   📎 Source nodes used: {len(source_nodes)}")
-        except Exception:
-            # Not critical if this fails
-            pass
+        print(f"   📎 Source nodes used: {num_nodes}")
 
         return context
     
+    def _get_llm_for_query(self):
+        """
+        Get LLM for query engine based on available providers.
+        
+        Returns:
+            LLM instance or None if not available
+        """
+        try:
+            if Settings.AI_PROVIDER == "openai" and Settings.OPENAI_API_KEY:
+                # Use OpenAI LLM directly from LlamaIndex (if available)
+                try:
+                    from llama_index.llms.openai import OpenAI as LlamaIndexOpenAI
+                    return LlamaIndexOpenAI(
+                        model=Settings.OPENAI_MODEL,
+                        temperature=0.3,  # Lower temperature for more focused retrieval
+                        api_key=Settings.OPENAI_API_KEY
+                    )
+                except ImportError:
+                    # Package not installed, fallback to retriever only
+                    return None
+            elif Settings.AI_PROVIDER == "azure" and Settings.AZURE_TOKEN:
+                # Use custom Azure LLM wrapper
+                return AzureLLM(
+                    endpoint=Settings.AZURE_ENDPOINT,
+                    model=Settings.AZURE_MODEL,
+                    token=Settings.AZURE_TOKEN,
+                    temperature=0.3  # Lower temperature for more focused retrieval
+                )
+            else:
+                return None
+        except ImportError:
+            # Package not installed, fallback to retriever only
+            return None
+        except Exception as e:
+            print(f"   ⚠️ Failed to setup LLM for query engine: {e}")
+            return None
+    
+    @traceable(name="rag_summarize_context", run_type="chain")
     def _summarize_context(self, context: str, max_chars: int) -> str:
         """
         Summarize context using LLM to keep only key points.
@@ -255,11 +427,6 @@ class RAGService:
     
     def _summarize_with_azure(self, context: str, max_chars: int) -> str:
         """Summarize context using Azure AI Inference API."""
-        from azure.ai.inference import ChatCompletionsClient
-        from azure.ai.inference.models import SystemMessage, UserMessage
-        from azure.core.credentials import AzureKeyCredential
-        from azure.core.exceptions import HttpResponseError
-        
         client = ChatCompletionsClient(
             endpoint=Settings.AZURE_ENDPOINT,
             credential=AzureKeyCredential(Settings.AZURE_TOKEN)
@@ -292,8 +459,6 @@ Context to summarize:
     
     def _summarize_with_openai(self, context: str, max_chars: int) -> str:
         """Summarize context using OpenAI API."""
-        from openai import OpenAI
-        
         client = OpenAI(api_key=Settings.OPENAI_API_KEY)
         
         system_prompt = """You are a helpful assistant that summarizes technical documents.

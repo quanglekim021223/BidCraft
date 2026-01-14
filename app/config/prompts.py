@@ -26,9 +26,16 @@ TONE & STYLE (THE WESTERN STANDARD):
 WINNING STRUCTURE (FOLLOW STRICTLY):
 Output exactly 5 slides separated by "---SLIDE---".
 
+IMPORTANT: Do NOT include slide titles (e.g., "EXECUTIVE SUMMARY") in your content. 
+Titles will be added automatically. Start each slide content directly with bullet points.
+
 Slide 1: EXECUTIVE SUMMARY (The Hook)
 -   Don't just say "Hello". State the value proposition immediately.
--   Highlight TMA's scale (e.g., "3000+ Engineers") from Context to build trust instantly.
+-   MANDATORY: Extract and use SPECIFIC NUMBERS from [INTERNAL KNOWLEDGE]:
+    * Total engineer count (e.g., "4,000 engineers" NOT "3000+")
+    * Company established year (e.g., "Established in 1997" = 27 years of experience)
+    * Any other impressive scale metrics (offices, clients, etc.)
+-   These numbers build INSTANT TRUST with US/EU clients who value concrete scale indicators.
 
 Slide 2: UNDERSTANDING THE CHALLENGE (The Empathy)
 -   Rephrase the client's problem using industry-standard terminology.
@@ -36,20 +43,44 @@ Slide 2: UNDERSTANDING THE CHALLENGE (The Empathy)
 
 Slide 3: OUR SOLUTION (The Meat)
 -   Propose a specific technical approach.
--   MUST reference relevant Case Studies or Domains from [INTERNAL KNOWLEDGE] (e.g., "Leveraging our Fintech Center experience...").
+-   MANDATORY: Reference DOMAIN EXPERTISE from [INTERNAL KNOWLEDGE]:
+    * If [INTERNAL KNOWLEDGE] mentions Industries/Domains (Finance, Retail, E-commerce, Logistics, Healthcare, etc.), 
+      you MUST write: "Leveraging our proven experience in [DOMAIN] domain..." 
+    * Example: "Leveraging our Retail & E-commerce domain expertise..." if context mentions Retail
+    * This proves "We've done this before" - critical for client confidence.
+-   If no specific domain is mentioned, reference relevant technology groups or centers from context.
 
 Slide 4: TECHNOLOGY STACK (The Expertise)
 -   List the technologies.
 -   Explain WHY we chose them (e.g., "Python for scalability", "AWS for security").
 -   Use facts from context (e.g., "Supported by 400 Cloud Certified Engineers").
+-   Reference TMA's partnerships with Cloud Providers if mentioned in [INTERNAL KNOWLEDGE].
 
 Slide 5: ROADMAP & COMMITMENT (The Close)
 -   Provide a realistic timeline based on the requirement.
--   Mention Quality Standards (ISO, Security) from Context to reduce risk fears.
+-   MANDATORY: Mention SPECIFIC CERTIFICATIONS from [INTERNAL KNOWLEDGE]:
+    * If context mentions ISO 27001, write EXACTLY: "Security guaranteed by our ISO 27001 certified processes"
+    * If context mentions other ISO standards (ISO 9001, ISO 14001, etc.), mention them specifically
+    * Certifications are 10x more valuable than generic "security awareness training"
+    * This reduces risk fears and shows compliance maturity.
 
 STRICT RULES:
--   Use information from [INTERNAL KNOWLEDGE] for facts/numbers.
--   If the knowledge base says "700 AI engineers", write exactly "700". Do NOT hallucinate numbers.
+1.  **NUMBER EXTRACTION:** Scan [INTERNAL KNOWLEDGE] for ALL numbers (engineer count, year established, certifications, etc.). 
+    Use the EXACT numbers found. If context says "4,000 engineers", write "4,000" NOT "3000+" or "thousands".
+
+2.  **DOMAIN EXPERTISE:** If [INTERNAL KNOWLEDGE] lists Industries/Sectors/Domains, you MUST reference the most relevant one(s) 
+    to the client's requirement. This is non-negotiable - it's your competitive advantage.
+
+3.  **CERTIFICATIONS:** If [INTERNAL KNOWLEDGE] mentions ISO standards, certifications, or awards, you MUST include them 
+    in Slide 5. Generic phrases like "security training" are weak - specific certifications are strong.
+
+4.  **NO HALLUCINATION:** If a number or fact is NOT in [INTERNAL KNOWLEDGE], do NOT make it up. 
+    Better to omit than to hallucinate.
+
+5.  **PRIORITIZE IMPRESSIVE METRICS:** In Slide 1, prioritize the most impressive numbers that build trust:
+    - Engineer count > Technology groups count (for scale perception)
+    - Years of experience > Generic "established" (for maturity)
+    - Specific certifications > Generic "quality processes" (for compliance)
 """
     
     # User prompt template

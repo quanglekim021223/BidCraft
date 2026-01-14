@@ -1,12 +1,32 @@
 """AI service for content generation"""
 
+import os
 import time
+import threading
 from typing import Optional
 from datetime import datetime
 
-from langchain_openai import ChatOpenAI
-
+# Enable LangSmith tracing if configured
 from app.config.settings import Settings
+if Settings.LANGSMITH_ENABLED and Settings.LANGCHAIN_API_KEY:
+    os.environ["LANGCHAIN_API_KEY"] = Settings.LANGCHAIN_API_KEY
+    os.environ["LANGCHAIN_TRACING_V2"] = Settings.LANGCHAIN_TRACING_V2
+    os.environ["LANGCHAIN_PROJECT"] = Settings.LANGCHAIN_PROJECT
+    if Settings.LANGCHAIN_ENDPOINT:
+        os.environ["LANGCHAIN_ENDPOINT"] = Settings.LANGCHAIN_ENDPOINT
+    # Import traceable for manual tracing
+    from langsmith import traceable
+else:
+    # Dummy decorator if LangSmith not enabled
+    def traceable(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+
+from langchain_openai import ChatOpenAI
+from openai import OpenAI
+from openai import APIError, APITimeoutError
+
 from app.config.prompts import ProposalPrompts
 from app.services.rag_service import RAGService
 
@@ -23,6 +43,14 @@ class AIService:
         """
         Settings.validate()
         self.provider = Settings.AI_PROVIDER
+        
+        # Log LangSmith status
+        if Settings.LANGSMITH_ENABLED and Settings.LANGCHAIN_API_KEY:
+            print(f"📊 LangSmith tracing enabled (Project: {Settings.LANGCHAIN_PROJECT})")
+            print(f"   ✅ Azure provider calls will be traced via @traceable decorator")
+        elif Settings.LANGSMITH_ENABLED:
+            print("⚠️  LangSmith enabled but LANGCHAIN_API_KEY not set. Tracing disabled.")
+        
         self._setup_llm()
         self._setup_prompt(prompt_style)
 
@@ -86,6 +114,7 @@ class AIService:
         context = self.rag_service.retrieve_context(query)
         return context
 
+    @traceable(name="generate_proposal_content", run_type="chain")
     def generate_proposal_content(self, requirement_text: str) -> str:
         """
         Generate proposal content using AI
@@ -105,6 +134,9 @@ class AIService:
 
         try:
             if self.provider == "azure":
+                # Test connection before generating
+                if not self._test_azure_connection():
+                    raise Exception("Azure API connection test failed. Please check your GITHUB_TOKEN and endpoint.")
                 result = self._generate_with_azure(requirement_text, context)
             else:
                 print("   📤 Preparing LangChain chain...")
@@ -130,6 +162,74 @@ class AIService:
             print(f"   ❌ Failed after {elapsed_time:.2f} seconds")
             raise
     
+    def _test_azure_connection(self) -> bool:
+        """
+        Test Azure API connection with a simple request
+        
+        Returns:
+            True if connection successful, False otherwise
+        """
+        print("   🔧 Testing Azure API connection...")
+        print(f"      Endpoint: {Settings.AZURE_ENDPOINT}")
+        print(f"      Model: {Settings.AZURE_MODEL}")
+        
+        try:
+            client = OpenAI(
+                base_url=Settings.AZURE_ENDPOINT,
+                api_key=Settings.AZURE_TOKEN,
+            )
+            
+            # Simple test request with timeout
+            test_response = None
+            test_exception = [None]
+            
+            def test_call():
+                try:
+                    nonlocal test_response
+                    test_response = client.chat.completions.create(
+                        messages=[
+                            {
+                                "role": "developer",
+                                "content": "You are a helpful assistant.",
+                            },
+                            {
+                                "role": "user",
+                                "content": "Say hello",
+                            }
+                        ],
+                        model=Settings.AZURE_MODEL,
+                        timeout=10.0,  # 10 second timeout for test
+                    )
+                except Exception as e:
+                    test_exception[0] = e
+            
+            test_thread = threading.Thread(target=test_call)
+            test_thread.daemon = True
+            test_thread.start()
+            test_thread.join(timeout=10)
+            
+            if test_thread.is_alive():
+                print("      ❌ Connection test timed out (10s)")
+                return False
+            
+            if test_exception[0]:
+                error_msg = str(test_exception[0])
+                print(f"      ❌ Connection test failed: {error_msg[:200]}...")
+                return False
+            
+            if test_response and test_response.choices:
+                print("      ✅ Connection test successful")
+                print(f"      Response preview: {test_response.choices[0].message.content[:50]}...")
+                return True
+            else:
+                print("      ❌ Connection test failed: No response")
+                return False
+                
+        except Exception as e:
+            print(f"      ❌ Connection test failed: {str(e)[:200]}...")
+            return False
+    
+    @traceable(name="azure_generate_proposal", run_type="chain")
     def _generate_with_azure(self, requirement_text: str, context: str) -> str:
         """
         Generate content using Azure AI Inference API with retry logic
@@ -143,11 +243,6 @@ class AIService:
         Raises:
             Exception: If all retry attempts fail
         """
-        from azure.ai.inference import ChatCompletionsClient
-        from azure.ai.inference.models import SystemMessage, UserMessage
-        from azure.core.credentials import AzureKeyCredential
-        from azure.core.exceptions import HttpResponseError
-        
         print("   🔧 Step 1/4: Preparing prompts...")
         # Use standard Western-style prompt
         system_message = ProposalPrompts.SYSTEM_PROMPT
@@ -167,18 +262,19 @@ class AIService:
         print(f"      Endpoint: {Settings.AZURE_ENDPOINT}")
         print(f"      Model: {Settings.AZURE_MODEL}")
         
-        # Initialize Azure client
-        client = ChatCompletionsClient(
-            endpoint=Settings.AZURE_ENDPOINT,
-            credential=AzureKeyCredential(Settings.AZURE_TOKEN),
+        # Initialize OpenAI client with Azure endpoint
+        client = OpenAI(
+            base_url=Settings.AZURE_ENDPOINT,
+            api_key=Settings.AZURE_TOKEN,
         )
-        print("      ✅ Client initialized")
+        print("      ✅ Client initialized (using OpenAI client with Azure endpoint)")
         print()
         
         # Retry configuration
         max_retries = 3
-        base_delay = 5  # seconds
-        max_delay = 60  # seconds
+        base_delay = 10  # seconds (increased for rate limit)
+        max_delay = 180  # seconds (3 minutes for rate limit)
+        request_timeout = 300  # seconds (5 minutes) for long context
         
         print("   🔧 Step 3/4: Sending request to Azure AI Inference API...")
         print(f"      Max retries: {max_retries}")
@@ -196,15 +292,46 @@ class AIService:
                 
                 request_start = time.time()
                 print(f"      [{datetime.now().strftime('%H:%M:%S')}] Sending HTTP request...")
+                print(f"      ⏱️  Timeout: {request_timeout} seconds")
                 
-                # Make request
-                response = client.complete(
-                    messages=[
-                        SystemMessage(system_message),
-                        UserMessage(user_message),
-                    ],
-                    model=Settings.AZURE_MODEL,
-                )
+                # Make request with timeout
+                response = None
+                exception = [None]
+                
+                def api_call():
+                    try:
+                        nonlocal response
+                        response = client.chat.completions.create(
+                            messages=[
+                                {
+                                    "role": "developer",
+                                    "content": system_message,
+                                },
+                                {
+                                    "role": "user",
+                                    "content": user_message,
+                                }
+                            ],
+                            model=Settings.AZURE_MODEL,
+                        )
+                    except Exception as e:
+                        exception[0] = e
+                
+                # Run API call in thread with timeout
+                api_thread = threading.Thread(target=api_call)
+                api_thread.daemon = True
+                api_thread.start()
+                api_thread.join(timeout=request_timeout)  # 300 second timeout for long context
+                
+                if api_thread.is_alive():
+                    print(f"      ⚠️  [{datetime.now().strftime('%H:%M:%S')}] Request timeout after {request_timeout} seconds")
+                    raise TimeoutError(f"Azure API call timed out after {request_timeout} seconds")
+                
+                if exception[0]:
+                    raise exception[0]
+                
+                if response is None:
+                    raise Exception("No response from Azure API")
                 
                 request_time = time.time() - request_start
                 print(f"      [{datetime.now().strftime('%H:%M:%S')}] ✅ Response received ({request_time:.2f}s)")
@@ -220,9 +347,22 @@ class AIService:
                 
                 return content
                 
-            except HttpResponseError as e:
+            except TimeoutError as e:
+                attempt_time = time.time() - attempt_start
+                print(f"      ❌ Request timed out after {attempt_time:.2f} seconds")
+                print(f"      Error: {str(e)}")
+                
+                if attempt < max_retries - 1:
+                    delay = min(base_delay * (2 ** attempt), max_delay)
+                    print(f"      ⏳ Waiting {delay} seconds before retry...")
+                    time.sleep(delay)
+                else:
+                    print(f"      ❌ All retry attempts exhausted")
+                    raise Exception(f"Azure API timeout after {max_retries} attempts")
+                    
+            except APIError as e:
                 error_message = str(e)
-                status_code = getattr(e, 'status_code', None)
+                status_code = getattr(e, 'status_code', None) or getattr(e, 'response', {}).get('status_code', None)
                 attempt_time = time.time() - attempt_start
                 
                 print(f"      ❌ Request failed after {attempt_time:.2f} seconds")
